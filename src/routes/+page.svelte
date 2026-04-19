@@ -3,9 +3,12 @@
   import { fetchLiveFxRatesToJPY } from '$lib/fx-fetch';
   import { COUNTRY_RULES } from '$lib/tax/rules';
   import { compareAllCountries } from '$lib/tax/compare';
+  import { buildSalarySweep, DEFAULT_SALARY_SWEEP_RANGE } from '$lib/tax/salarySweep';
+  import type { SalarySweepResult, SalarySweepSeries } from '$lib/tax/salarySweep';
   import { convertCurrency, DEFAULT_FX_RATES, formatMoney } from '$lib/fx';
   import type {
     CalculatorInput,
+    CountryCode,
     CountryResult,
     Currency,
     FxRates,
@@ -25,6 +28,32 @@
 
   type ThemePreference = 'system' | 'light' | 'dark';
   type FxEditableCurrency = Exclude<Currency, 'JPY'>;
+  type SweepPointLabel = {
+    annualUSD: number;
+    annualDisplay: number;
+    x: number;
+  };
+
+  const SWEEP_CHART_WIDTH = 920;
+  const SWEEP_CHART_HEIGHT = 360;
+  const SWEEP_CHART_INSET = {
+    top: 18,
+    right: 18,
+    bottom: 56,
+    left: 108
+  };
+
+  const countrySeriesColors: Record<CountryCode, string> = {
+    JP: '#00a7a0',
+    SE: '#3366ff',
+    TH: '#0d7a4f',
+    CH: '#e07b24',
+    UK: '#355070',
+    USCA: '#d64545',
+    MY: '#0f9ea8',
+    SG: '#d26f06',
+    IN: '#1f4f9e'
+  };
 
   const INPUT_STORAGE_KEY = 'tax-calc-input-v2';
   const INPUT_STORAGE_KEY_V1 = 'tax-calc-input-v1';
@@ -137,6 +166,16 @@
   let displayCountries: DisplayCountry[] = [];
   let highestMonthlyNet = 1;
   let fxUpdatedDisplay = 'default';
+  let salarySweep: SalarySweepResult = {
+    range: DEFAULT_SALARY_SWEEP_RANGE,
+    ticks: [],
+    series: []
+  };
+  let hiddenSweepCountries: CountryCode[] = [];
+  let visibleSweepSeries: SalarySweepSeries[] = [];
+  let sweepYDomainMax = 1;
+  let sweepYTicks: number[] = [];
+  let sweepXLabels: SweepPointLabel[] = [];
 
   function isCurrency(value: unknown): value is Currency {
     return typeof value === 'string' && ALL_CURRENCIES.includes(value as Currency);
@@ -161,6 +200,55 @@
   function markFxAsManualSave(): void {
     fxSource = 'saved';
     fxUpdatedAt = new Date().toISOString();
+  }
+
+  function toggleSweepCountry(country: CountryCode): void {
+    if (hiddenSweepCountries.includes(country)) {
+      hiddenSweepCountries = hiddenSweepCountries.filter((item) => item !== country);
+      return;
+    }
+    hiddenSweepCountries = [...hiddenSweepCountries, country];
+  }
+
+  function resetSweepCountries(): void {
+    hiddenSweepCountries = [];
+  }
+
+  function isSweepCountryHidden(country: CountryCode): boolean {
+    return hiddenSweepCountries.includes(country);
+  }
+
+  function getSweepX(annualUSD: number): number {
+    const innerWidth = SWEEP_CHART_WIDTH - SWEEP_CHART_INSET.left - SWEEP_CHART_INSET.right;
+    const usdSpan = salarySweep.range.maxAnnualUSD - salarySweep.range.minAnnualUSD;
+    if (usdSpan <= 0) return SWEEP_CHART_INSET.left;
+    return SWEEP_CHART_INSET.left + ((annualUSD - salarySweep.range.minAnnualUSD) / usdSpan) * innerWidth;
+  }
+
+  function getSweepY(netMonthlyDisplay: number): number {
+    const innerHeight = SWEEP_CHART_HEIGHT - SWEEP_CHART_INSET.top - SWEEP_CHART_INSET.bottom;
+    return SWEEP_CHART_INSET.top + innerHeight - (netMonthlyDisplay / sweepYDomainMax) * innerHeight;
+  }
+
+  function createSweepPath(series: SalarySweepSeries): string {
+    return series.points
+      .map((point, index) => {
+        const command = index === 0 ? 'M' : 'L';
+        return `${command} ${getSweepX(point.annualUSD)} ${getSweepY(point.netMonthlyDisplay)}`;
+      })
+      .join(' ');
+  }
+
+  function roundSweepStep(maxValue: number): number {
+    const roughStep = maxValue / 5;
+    if (!Number.isFinite(roughStep) || roughStep <= 0) return 1;
+    const power = 10 ** Math.floor(Math.log10(roughStep));
+    const normalized = roughStep / power;
+
+    if (normalized <= 1) return power;
+    if (normalized <= 2) return 2 * power;
+    if (normalized <= 5) return 5 * power;
+    return 10 * power;
   }
 
   $: if (salaryAmount < 0) {
@@ -279,6 +367,37 @@
       effectiveRateDisplay: `${(result.effectiveRate * 100).toFixed(1)}%`
     };
   });
+
+  $: salarySweep = buildSalarySweep(
+    calculatorInput,
+    displayCurrency,
+    fxRates,
+    DEFAULT_SALARY_SWEEP_RANGE
+  );
+
+  $: visibleSweepSeries = salarySweep.series.filter((series) => !hiddenSweepCountries.includes(series.country));
+
+  $: {
+    const targetSeries = visibleSweepSeries.length > 0 ? visibleSweepSeries : salarySweep.series;
+    const maxValue = Math.max(
+      1,
+      ...targetSeries.flatMap((series) => series.points.map((point) => point.netMonthlyDisplay))
+    );
+    const step = roundSweepStep(maxValue);
+    const roundedMax = Math.ceil(maxValue / step) * step;
+
+    sweepYDomainMax = Math.max(1, roundedMax);
+    sweepYTicks = [];
+    for (let value = 0; value <= sweepYDomainMax; value += step) {
+      sweepYTicks.push(value);
+    }
+  }
+
+  $: sweepXLabels = salarySweep.ticks.map((tick) => ({
+    annualUSD: tick.annualUSD,
+    annualDisplay: tick.annualDisplay,
+    x: getSweepX(tick.annualUSD)
+  }));
 
   $: highestMonthlyNet = Math.max(1, ...displayCountries.map((item) => item.netMonthlyDisplay));
 
@@ -514,6 +633,23 @@
     </div>
   </header>
 
+  <section class="panel currency-rail" aria-label="Display currency selector">
+    <div class="section-head">
+      <h2>Display Currency</h2>
+      <p class="muted">Used across cards and charts</p>
+    </div>
+    <div class="currency-options">
+      {#each ALL_CURRENCIES as currency}
+        <button
+          type="button"
+          class="currency-chip"
+          class:active={displayCurrency === currency}
+          on:click={() => (displayCurrency = currency)}>{currency}</button
+        >
+      {/each}
+    </div>
+  </section>
+
   <div class="workspace">
     <section class="panel controls">
       <h2>Salary Profile</h2>
@@ -546,21 +682,12 @@
         />
       </label>
 
-      <div class="grid two">
+      <div class="grid">
         <label>
           <span>Salary period</span>
           <select bind:value={salaryPeriod}>
             <option value="annual">Annual</option>
             <option value="monthly">Monthly</option>
-          </select>
-        </label>
-
-        <label>
-          <span>Display currency</span>
-          <select bind:value={displayCurrency}>
-            {#each ALL_CURRENCIES as currency}
-              <option value={currency}>{currency}</option>
-            {/each}
           </select>
         </label>
       </div>
@@ -641,6 +768,19 @@
           </section>
 
           <section>
+            <h3>Display currency (fallback)</h3>
+            <p class="muted">Primary selector is above in the currency rail.</p>
+            <label>
+              <span>Display currency</span>
+              <select bind:value={displayCurrency}>
+                {#each ALL_CURRENCIES as currency}
+                  <option value={currency}>{currency}</option>
+                {/each}
+              </select>
+            </label>
+          </section>
+
+          <section>
             <h3>Theme</h3>
             <div class="theme-switch" role="group" aria-label="Theme mode">
               <button
@@ -666,6 +806,137 @@
     </section>
 
     <section class="results">
+      <section class="panel sweep-panel">
+        <div class="section-head">
+          <h2>Monthly Take-home vs Annual Compensation</h2>
+          <p class="muted">
+            Fixed annual range: {formatMoney(DEFAULT_SALARY_SWEEP_RANGE.minAnnualUSD, 'USD')} to
+            {formatMoney(DEFAULT_SALARY_SWEEP_RANGE.maxAnnualUSD, 'USD')}
+          </p>
+        </div>
+        <p class="muted">
+          Y-axis shows monthly take-home in {displayCurrency}. X-axis values are annual compensation
+          shown in {displayCurrency}, with USD-equivalent labels under each tick.
+        </p>
+
+        <div class="sweep-chart-shell">
+          <div class="sweep-scroll">
+            <svg
+              class="sweep-chart"
+              viewBox={`0 0 ${SWEEP_CHART_WIDTH} ${SWEEP_CHART_HEIGHT}`}
+              role="img"
+              aria-label="Monthly take-home versus annual compensation line chart"
+            >
+              <g class="sweep-grid">
+                {#each sweepYTicks as yTick}
+                  <line
+                    x1={SWEEP_CHART_INSET.left}
+                    x2={SWEEP_CHART_WIDTH - SWEEP_CHART_INSET.right}
+                    y1={getSweepY(yTick)}
+                    y2={getSweepY(yTick)}
+                  />
+                  <text class="sweep-y-label" x={SWEEP_CHART_INSET.left - 8} y={getSweepY(yTick)} text-anchor="end">
+                    {formatMoney(yTick, displayCurrency)}
+                  </text>
+                {/each}
+              </g>
+
+              <line
+                class="sweep-axis"
+                x1={SWEEP_CHART_INSET.left}
+                y1={SWEEP_CHART_INSET.top}
+                x2={SWEEP_CHART_INSET.left}
+                y2={SWEEP_CHART_HEIGHT - SWEEP_CHART_INSET.bottom}
+              />
+              <line
+                class="sweep-axis"
+                x1={SWEEP_CHART_INSET.left}
+                y1={SWEEP_CHART_HEIGHT - SWEEP_CHART_INSET.bottom}
+                x2={SWEEP_CHART_WIDTH - SWEEP_CHART_INSET.right}
+                y2={SWEEP_CHART_HEIGHT - SWEEP_CHART_INSET.bottom}
+              />
+
+              {#each sweepXLabels as xTick}
+                <line
+                  class="sweep-tick"
+                  x1={xTick.x}
+                  x2={xTick.x}
+                  y1={SWEEP_CHART_HEIGHT - SWEEP_CHART_INSET.bottom}
+                  y2={SWEEP_CHART_HEIGHT - SWEEP_CHART_INSET.bottom + 6}
+                />
+                <text
+                  class="sweep-x-label"
+                  x={xTick.x}
+                  y={SWEEP_CHART_HEIGHT - SWEEP_CHART_INSET.bottom + 18}
+                  text-anchor="middle"
+                >
+                  {formatMoney(xTick.annualDisplay, displayCurrency)}
+                </text>
+                <text
+                  class="sweep-x-sub-label"
+                  x={xTick.x}
+                  y={SWEEP_CHART_HEIGHT - SWEEP_CHART_INSET.bottom + 33}
+                  text-anchor="middle"
+                >
+                  {formatMoney(xTick.annualUSD, 'USD')}
+                </text>
+              {/each}
+
+              <text
+                class="sweep-axis-title"
+                x={(SWEEP_CHART_INSET.left + SWEEP_CHART_WIDTH - SWEEP_CHART_INSET.right) / 2}
+                y={SWEEP_CHART_HEIGHT - 6}
+                text-anchor="middle"
+              >
+                Annual compensation ({displayCurrency})
+              </text>
+
+              <text
+                class="sweep-axis-title"
+                x={30}
+                y={(SWEEP_CHART_INSET.top + SWEEP_CHART_HEIGHT - SWEEP_CHART_INSET.bottom) / 2}
+                transform={`rotate(-90 30 ${(SWEEP_CHART_INSET.top + SWEEP_CHART_HEIGHT - SWEEP_CHART_INSET.bottom) / 2})`}
+                text-anchor="middle"
+              >
+                Monthly take-home ({displayCurrency})
+              </text>
+
+              {#if visibleSweepSeries.length === 0}
+                <text class="sweep-empty" x={SWEEP_CHART_WIDTH / 2} y={SWEEP_CHART_HEIGHT / 2} text-anchor="middle">
+                  Enable at least one country in the legend.
+                </text>
+              {:else}
+                {#each visibleSweepSeries as series}
+                  <path
+                    class="sweep-series"
+                    d={createSweepPath(series)}
+                    style={`stroke:${countrySeriesColors[series.country]}`}
+                  />
+                {/each}
+              {/if}
+            </svg>
+          </div>
+        </div>
+
+        <div class="sweep-legend" role="group" aria-label="Country lines">
+          {#each salarySweep.series as series}
+            <button
+              type="button"
+              class="legend-item"
+              class:is-hidden={isSweepCountryHidden(series.country)}
+              on:click={() => toggleSweepCountry(series.country)}
+            >
+              <span class="legend-dot" style={`background:${countrySeriesColors[series.country]}`}></span>
+              <span>{countryNames[series.country]}</span>
+            </button>
+          {/each}
+
+          {#if hiddenSweepCountries.length > 0}
+            <button type="button" class="legend-reset" on:click={resetSweepCountries}>Show all countries</button>
+          {/if}
+        </div>
+      </section>
+
       <section class="panel">
         <div class="section-head">
           <h2>Monthly Take-home ({displayCurrency})</h2>
@@ -910,6 +1181,41 @@
     color: var(--ink-soft);
   }
 
+  .currency-rail {
+    display: grid;
+    gap: 0.6rem;
+    padding: 0.78rem 0.9rem;
+  }
+
+  .currency-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.48rem;
+  }
+
+  .currency-chip {
+    appearance: none;
+    border: 1px solid var(--chip-border);
+    border-radius: 999px;
+    background: var(--chip-bg);
+    color: var(--ink);
+    padding: 0.3rem 0.74rem;
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: border-color 140ms ease, color 140ms ease, background 140ms ease;
+  }
+
+  .currency-chip.active {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 14%, var(--chip-bg));
+    color: var(--accent);
+  }
+
+  .currency-chip:hover {
+    border-color: var(--accent-soft);
+  }
+
   .workspace {
     display: grid;
     grid-template-columns: minmax(330px, 390px) minmax(0, 1fr);
@@ -1064,6 +1370,124 @@
     align-items: baseline;
     gap: 0.8rem;
     flex-wrap: wrap;
+  }
+
+  .sweep-panel {
+    display: grid;
+    gap: 0.65rem;
+  }
+
+  .sweep-chart-shell {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 0.44rem 0.56rem;
+    background: color-mix(in srgb, var(--panel) 90%, transparent);
+  }
+
+  .sweep-scroll {
+    overflow-x: auto;
+    padding-bottom: 0.2rem;
+  }
+
+  .sweep-chart {
+    display: block;
+    width: 100%;
+    min-width: 760px;
+    max-height: 390px;
+  }
+
+  .sweep-grid line {
+    stroke: color-mix(in srgb, var(--line) 72%, transparent);
+    stroke-width: 1;
+  }
+
+  .sweep-axis {
+    stroke: var(--line);
+    stroke-width: 1.4;
+  }
+
+  .sweep-tick {
+    stroke: var(--line);
+    stroke-width: 1.2;
+  }
+
+  .sweep-y-label,
+  .sweep-x-label,
+  .sweep-x-sub-label,
+  .sweep-axis-title,
+  .sweep-empty {
+    fill: var(--ink-soft);
+    dominant-baseline: middle;
+  }
+
+  .sweep-y-label {
+    font-size: 10.5px;
+  }
+
+  .sweep-x-label {
+    font-size: 10.8px;
+  }
+
+  .sweep-x-sub-label {
+    font-size: 9.6px;
+  }
+
+  .sweep-axis-title {
+    fill: var(--ink);
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .sweep-empty {
+    font-size: 12.5px;
+  }
+
+  .sweep-series {
+    fill: none;
+    stroke-width: 2.4;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+    vector-effect: non-scaling-stroke;
+  }
+
+  .sweep-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    align-items: center;
+  }
+
+  .legend-item,
+  .legend-reset {
+    appearance: none;
+    border: 1px solid var(--chip-border);
+    border-radius: 999px;
+    background: var(--chip-bg);
+    color: var(--ink);
+    font-size: 0.78rem;
+    padding: 0.24rem 0.62rem;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .legend-item.is-hidden {
+    opacity: 0.48;
+    border-style: dashed;
+  }
+
+  .legend-item:hover,
+  .legend-reset:hover {
+    border-color: var(--accent-soft);
+  }
+
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    display: inline-block;
+    flex-shrink: 0;
   }
 
   .chart-list {
@@ -1285,6 +1709,20 @@
 
     .residency-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .currency-options {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      padding-bottom: 0.25rem;
+    }
+
+    .currency-chip {
+      flex: 0 0 auto;
+    }
+
+    .sweep-chart {
+      min-width: 700px;
     }
   }
 
