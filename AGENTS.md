@@ -11,7 +11,7 @@ This file defines how AI coding agents (Codex, Claude, Copilot, and similar tool
 
 ## 2) Repository Context
 
-- This repo contains machine-readable tax implementation specs.
+- This repo contains machine-readable tax implementation specs and a SvelteKit frontend app.
 - Primary spec files are in `tax-specs/`:
   - `tax-specs/japan-tax.md`
   - `tax-specs/sweden-tax.md`
@@ -89,3 +89,22 @@ Before finishing, agents must provide:
   `https://raw.githubusercontent.com/openai/codex/main/AGENTS.md`
 - Temporal Java SDK AGENTS instructions:
   `https://raw.githubusercontent.com/temporalio/sdk-java/master/AGENTS.md`
+
+## 11) Portable Frontend Skill Policy (Required for UI Work)
+
+This section is the repository-local frontend skill and is the source of truth for all agents, including external contributors on GitHub.
+
+- Apply these rules for any UI/UX change:
+  - Prioritize clarity and simplification over control-heavy layouts.
+  - Keep a deliberate visual direction; avoid generic or boilerplate UI patterns.
+  - Use purposeful typography and spacing hierarchy; avoid tiny unreadable chart/UI text.
+  - Use a coherent color system via shared CSS variables; avoid random one-off colors.
+  - Use restrained motion only when it improves comprehension (state change, focus, reveal).
+  - Preserve existing design language when editing existing screens unless a redesign is requested.
+  - Ensure desktop and mobile behavior remain usable (no clipped controls/text, no overlap).
+- For chart work specifically:
+  - Axis labels, legends, and tooltips must remain readable at common viewport sizes.
+  - Hover/interaction states should expose key values clearly and not obstruct core data.
+- Validation expectations for frontend edits:
+  - Run `npm run check` and `npm run build`.
+  - Confirm key interactions manually in browser when behavior changes (e.g., hover, toggles, responsive layout).

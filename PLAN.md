@@ -1,28 +1,34 @@
-# SvelteKit Tax Calculator Implementation Plan
+# Tax Calculator Living Plan
 
-## Summary
-- Build a standalone SvelteKit + TypeScript webapp deployable on Vercel.
-- Implement all tax logic in frontend TypeScript modules.
-- Compare take-home pay for Japan, Sweden, and Thailand.
-- Use simple inputs (salary, marital/dependents, age, residency months) and manual FX conversion for JPY/SEK/THB.
+Last updated: 2026-04-19
 
-## Scope Decisions
-- Employment-income focused for v1.
-- Tax-year baseline: Japan 2025, Sweden 2025, Thailand per provided 2567/2024 spec.
-- Take-home defined as gross minus income tax minus modeled employee contributions.
-- Residency handled by simplified status classification from months in-country.
+## Current State
 
-## Build Steps
-1. Scaffold SvelteKit TypeScript app with Vercel adapter.
-2. Add shared domain types and FX utilities.
-3. Implement country tax engines (JP/SE/TH) with explicit assumptions and source metadata.
-4. Implement cross-country comparison pipeline and currency conversion.
-5. Build a simple single-page UI with input controls and comparison cards.
-6. Add tests for country engines and comparison behavior.
-7. Validate project scripts (`check`, `test`, `build`) and prepare for Vercel deploy.
+- Web app is live on SvelteKit + TypeScript with Vercel deployment.
+- Jurisdictions implemented: JP, SE, TH, CH, UK, USCA, MY, SG, IN.
+- Core features implemented:
+  - input/profile controls (salary, period, marital/dependents, age, residency months)
+  - display-currency rail + FX override workflow
+  - country comparison cards + monthly ranking bars
+  - salary sweep chart (USD 50k to 600k) with hover comparison tooltip and legend filtering
+- Test and build baseline:
+  - `npm run check`
+  - `npm run test`
+  - `npm run build`
 
-## Validation Criteria
-- User can input monthly or annual salary.
-- User can set marital status, spouse income status, dependents, age, and residency months per country.
-- App returns annual and monthly take-home for all three countries.
-- App supports display/input conversion among JPY, SEK, and THB.
+## Active Priorities
+
+1. Tax-model quality hardening
+   - continue adding regression tests for high-income and threshold transitions across jurisdictions
+   - keep every substantive tax-rule change source-backed in code/docs and PR notes
+2. UI clarity and contribution ergonomics
+   - continue reducing UI complexity while preserving comparability across countries
+   - keep chart readability and responsive behavior as a non-regression requirement
+3. Contributor workflow
+   - keep AGENTS policy and README deployment/contribution instructions aligned with actual repo behavior
+   - prefer small, reviewable PRs with explicit validation output
+
+## Maintenance Rule
+
+- This file is a living status/priority document, not a one-time bootstrap checklist.
+- Update it whenever scope, supported jurisdictions, or key UX/data-model direction changes materially.
