@@ -22,9 +22,20 @@ const HEALTH_INSURANCE_DEDUCTION_SINGLE = 1_900;
 const HEALTH_INSURANCE_DEDUCTION_MARRIED = 3_800;
 const HEALTH_INSURANCE_DEDUCTION_PER_DEPENDENT = 700;
 
-// Zurich-style approximation layers.
-const CANTONAL_MULTIPLIER = 3.5;
 const MUNICIPAL_MULTIPLIER = 1.19;
+const MARRIED_COMBINED_RATE_RELIEF = 0.015;
+
+// Calibrated for medium-canton Zurich-style total income tax burden.
+const ZURICH_COMBINED_TAX_RATE_ANCHORS: Array<{ taxableIncome: number; rate: number }> = [
+  { taxableIncome: 0, rate: 0 },
+  { taxableIncome: 50_000, rate: 0.05 },
+  { taxableIncome: 100_000, rate: 0.12 },
+  { taxableIncome: 150_000, rate: 0.16 },
+  { taxableIncome: 250_000, rate: 0.22 },
+  { taxableIncome: 400_000, rate: 0.28 },
+  { taxableIncome: 600_000, rate: 0.32 },
+  { taxableIncome: 900_000, rate: 0.34 }
+];
 
 type SwissTariff = 'single' | 'married';
 
@@ -52,7 +63,8 @@ function federalTaxSingle2025(income: number): number {
   if (income <= 185_000) return 6_190 + (income - 141_500) * 0.11;
   if (income <= 793_300) return 10_975 + (income - 185_000) * 0.132;
   if (income <= 940_800) return 91_241 + (income - 793_300) * 0.115;
-  return income * 0.115;
+  const atTopBracketStart = 91_241 + (940_800 - 793_300) * 0.115;
+  return atTopBracketStart + (income - 940_800) * 0.115;
 }
 
 function federalTaxMarried2025(income: number): number {
@@ -63,7 +75,8 @@ function federalTaxMarried2025(income: number): number {
   if (income <= 141_500) return 1_795 + (income - 108_600) * 0.07;
   if (income <= 185_000) return 4_098 + (income - 141_500) * 0.09;
   if (income <= 940_800) return 8_013 + (income - 185_000) * 0.115;
-  return income * 0.115;
+  const atTopBracketStart = 8_013 + (940_800 - 185_000) * 0.115;
+  return atTopBracketStart + (income - 940_800) * 0.115;
 }
 
 function federalTax2025(income: number, tariff: SwissTariff, dependents: number): number {
@@ -72,6 +85,30 @@ function federalTax2025(income: number, tariff: SwissTariff, dependents: number)
   const afterChildDeduction = clampMin(beforeChildDeduction - dependents * FEDERAL_CHILD_TAX_DEDUCTION, 0);
   // Swiss federal tax payments are rounded down to CHF 0.05.
   return floorTo(afterChildDeduction, 0.05);
+}
+
+function interpolatedCombinedIncomeTaxRate(taxableIncome: number): number {
+  if (taxableIncome <= 0) return 0;
+
+  const anchors = ZURICH_COMBINED_TAX_RATE_ANCHORS;
+  const lastAnchor = anchors[anchors.length - 1];
+  if (taxableIncome >= lastAnchor.taxableIncome) {
+    return lastAnchor.rate;
+  }
+
+  for (let index = 1; index < anchors.length; index += 1) {
+    const previous = anchors[index - 1];
+    const current = anchors[index];
+    if (taxableIncome > current.taxableIncome) continue;
+
+    const interval = current.taxableIncome - previous.taxableIncome;
+    if (interval <= 0) return current.rate;
+
+    const progress = (taxableIncome - previous.taxableIncome) / interval;
+    return previous.rate + (current.rate - previous.rate) * progress;
+  }
+
+  return lastAnchor.rate;
 }
 
 export function calcSwitzerland2025ZurichEstimate(params: {
@@ -115,7 +152,12 @@ export function calcSwitzerland2025ZurichEstimate(params: {
   );
 
   const federalTax = federalTax2025(taxableIncome, tariff, dependents);
-  const cantonalTaxEstimate = federalTax * CANTONAL_MULTIPLIER;
+  const combinedIncomeTaxRate = interpolatedCombinedIncomeTaxRate(taxableIncome);
+  const adjustedCombinedIncomeTaxRate =
+    tariff === 'married' ? clampMin(combinedIncomeTaxRate - MARRIED_COMBINED_RATE_RELIEF, 0) : combinedIncomeTaxRate;
+  const totalIncomeTaxEstimate = Math.max(federalTax, gross * adjustedCombinedIncomeTaxRate);
+  const nonFederalTaxEstimate = clampMin(totalIncomeTaxEstimate - federalTax, 0);
+  const cantonalTaxEstimate = nonFederalTaxEstimate / (1 + MUNICIPAL_MULTIPLIER);
   const municipalTaxEstimate = cantonalTaxEstimate * MUNICIPAL_MULTIPLIER;
   const federalTaxRounded = Math.round(federalTax);
   const cantonalTaxRounded = Math.round(cantonalTaxEstimate);
@@ -139,7 +181,7 @@ export function calcSwitzerland2025ZurichEstimate(params: {
     employeeContribAnnualLocal: employeeSocialContribRounded,
     netAnnualLocal: netAnnualRounded,
     netMonthlyLocal: Math.round(netAnnualRounded / 12),
-    effectiveRate: gross === 0 ? 0 : (federalTax + cantonalTaxEstimate + municipalTaxEstimate + employeeSocialContrib) / gross,
+    effectiveRate: gross === 0 ? 0 : (totalIncomeTaxEstimate + employeeSocialContrib) / gross,
     breakdown: [
       { label: 'AHV/IV/EO employee (5.3%)', amount: Math.round(ahvIvEo) },
       { label: 'ALV employee (1.1%, cap CHF 148,200)', amount: Math.round(alv) },
@@ -151,12 +193,12 @@ export function calcSwitzerland2025ZurichEstimate(params: {
       { label: 'Health insurance lump-sum deduction', amount: Math.round(healthInsuranceDeduction) },
       { label: 'Taxable income (truncated to CHF 100)', amount: Math.round(taxableIncome) },
       { label: 'Federal income tax (DBSt estimate)', amount: Math.round(federalTax) },
-      { label: 'Cantonal tax estimate (Zurich-style multiplier)', amount: Math.round(cantonalTaxEstimate) },
+      { label: 'Cantonal tax estimate (Zurich-style calibrated split)', amount: Math.round(cantonalTaxEstimate) },
       { label: 'Municipal tax estimate (Zurich city 119%)', amount: Math.round(municipalTaxEstimate) }
     ],
     assumptions: [
       'Federal tax uses a simplified 2025 table approximation from the repository spec; not ESTV full lookup precision.',
-      'Cantonal and municipal taxes are Zurich-style estimates (cantonal ≈ 3.5x federal, municipal 119% of cantonal).',
+      'Cantonal and municipal taxes are Zurich-style calibrated estimates targeting medium-canton effective-rate ranges, with municipal tax set to 119% of cantonal tax.',
       'Church tax is excluded (assumed non-member).',
       'For <3 months residency proxy, v1 keeps the same formula and changes status/interpretation only.',
       'Married + spouse income flags do not add separate Swiss spouse-income deductions in this v1 model.'

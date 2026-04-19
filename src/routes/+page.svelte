@@ -5,6 +5,11 @@
   import { compareAllCountries } from '$lib/tax/compare';
   import { buildSalarySweep, DEFAULT_SALARY_SWEEP_RANGE } from '$lib/tax/salarySweep';
   import type { SalarySweepResult, SalarySweepSeries } from '$lib/tax/salarySweep';
+  import {
+    buildSweepHoverSummary,
+    getNearestSweepIndex,
+    type SweepHoverRow
+  } from '$lib/tax/salarySweepHover';
   import { convertCurrency, DEFAULT_FX_RATES, formatMoney } from '$lib/fx';
   import type {
     CalculatorInput,
@@ -33,6 +38,11 @@
     annualDisplay: number;
     x: number;
   };
+  type SweepHoverMarker = {
+    country: CountryCode;
+    x: number;
+    y: number;
+  };
 
   const SWEEP_CHART_WIDTH = 920;
   const SWEEP_CHART_HEIGHT = 360;
@@ -42,6 +52,9 @@
     bottom: 56,
     left: 108
   };
+  const SWEEP_PLOT_WIDTH = SWEEP_CHART_WIDTH - SWEEP_CHART_INSET.left - SWEEP_CHART_INSET.right;
+  const SWEEP_PLOT_HEIGHT = SWEEP_CHART_HEIGHT - SWEEP_CHART_INSET.top - SWEEP_CHART_INSET.bottom;
+  const SWEEP_TOOLTIP_WIDTH = 300;
 
   const countrySeriesColors: Record<CountryCode, string> = {
     JP: '#00a7a0',
@@ -176,6 +189,15 @@
   let sweepYDomainMax = 1;
   let sweepYTicks: number[] = [];
   let sweepXLabels: SweepPointLabel[] = [];
+  let sweepHoverIndex: number | null = null;
+  let sweepHoverAnnualUSD = 0;
+  let sweepHoverAnnualDisplay = 0;
+  let sweepHoverRows: SweepHoverRow[] = [];
+  let sweepHoverMarkers: SweepHoverMarker[] = [];
+  let sweepHoverX = SWEEP_CHART_INSET.left;
+  let sweepHoverTooltipX = SWEEP_CHART_INSET.left + 10;
+  let sweepHoverTooltipHeight = 64;
+  let sweepHoverBaselineCountry: CountryCode | null = null;
 
   function isCurrency(value: unknown): value is Currency {
     return typeof value === 'string' && ALL_CURRENCIES.includes(value as Currency);
@@ -249,6 +271,37 @@
     if (normalized <= 2) return 2 * power;
     if (normalized <= 5) return 5 * power;
     return 10 * power;
+  }
+
+  function resetSweepHover(): void {
+    sweepHoverIndex = null;
+  }
+
+  function handleSweepPointerMove(event: PointerEvent): void {
+    const target = event.currentTarget as SVGRectElement | null;
+    if (!target) return;
+
+    const bounds = target.getBoundingClientRect();
+    if (bounds.width <= 0) return;
+
+    const relativeX = ((event.clientX - bounds.left) / bounds.width) * SWEEP_PLOT_WIDTH;
+    const clampedX = Math.max(0, Math.min(SWEEP_PLOT_WIDTH, relativeX));
+    const annualUSD =
+      salarySweep.range.minAnnualUSD +
+      (clampedX / SWEEP_PLOT_WIDTH) * (salarySweep.range.maxAnnualUSD - salarySweep.range.minAnnualUSD);
+    sweepHoverIndex = getNearestSweepIndex(salarySweep.range, annualUSD);
+  }
+
+  function getSweepTooltipX(anchorX: number): number {
+    const minX = SWEEP_CHART_INSET.left + 8;
+    const maxX = SWEEP_CHART_WIDTH - SWEEP_CHART_INSET.right - SWEEP_TOOLTIP_WIDTH - 8;
+    const preferred = anchorX + 10;
+    return Math.max(minX, Math.min(maxX, preferred));
+  }
+
+  function formatSweepDelta(row: SweepHoverRow): string {
+    if (row.isBaseline) return '0.0% (baseline)';
+    return `${row.deltaPercent.toFixed(1)}%`;
   }
 
   $: if (salaryAmount < 0) {
@@ -398,6 +451,53 @@
     annualDisplay: tick.annualDisplay,
     x: getSweepX(tick.annualUSD)
   }));
+
+  $: {
+    const maxIndex = salarySweep.series[0] ? salarySweep.series[0].points.length - 1 : null;
+    if (sweepHoverIndex !== null && (maxIndex === null || sweepHoverIndex < 0 || sweepHoverIndex > maxIndex)) {
+      sweepHoverIndex = null;
+    }
+  }
+
+  $: {
+    if (sweepHoverIndex === null || visibleSweepSeries.length === 0) {
+      sweepHoverRows = [];
+      sweepHoverMarkers = [];
+      sweepHoverAnnualUSD = 0;
+      sweepHoverAnnualDisplay = 0;
+      sweepHoverBaselineCountry = null;
+      sweepHoverX = SWEEP_CHART_INSET.left;
+      sweepHoverTooltipX = SWEEP_CHART_INSET.left + 10;
+      sweepHoverTooltipHeight = 64;
+    } else {
+      const summary = buildSweepHoverSummary(visibleSweepSeries, sweepHoverIndex);
+      if (!summary) {
+        sweepHoverRows = [];
+        sweepHoverMarkers = [];
+        sweepHoverBaselineCountry = null;
+      } else {
+        sweepHoverRows = summary.rows;
+        sweepHoverAnnualUSD = summary.annualUSD;
+        sweepHoverAnnualDisplay = summary.annualDisplay;
+        sweepHoverBaselineCountry = summary.baselineCountry;
+        sweepHoverX = getSweepX(summary.annualUSD);
+        sweepHoverTooltipX = getSweepTooltipX(sweepHoverX);
+        sweepHoverTooltipHeight = 56 + sweepHoverRows.length * 16;
+
+        sweepHoverMarkers = visibleSweepSeries
+          .map((series) => {
+            const point = series.points[sweepHoverIndex as number];
+            if (!point) return null;
+            return {
+              country: series.country,
+              x: getSweepX(point.annualUSD),
+              y: getSweepY(point.netMonthlyDisplay)
+            };
+          })
+          .filter((marker): marker is SweepHoverMarker => marker !== null);
+      }
+    }
+  }
 
   $: highestMonthlyNet = Math.max(1, ...displayCountries.map((item) => item.netMonthlyDisplay));
 
@@ -816,7 +916,8 @@
         </div>
         <p class="muted">
           Y-axis shows monthly take-home in {displayCurrency}. X-axis values are annual compensation
-          shown in {displayCurrency}, with USD-equivalent labels under each tick.
+          shown in {displayCurrency}, with USD-equivalent labels under each tick. Hover a point to
+          compare visible countries against the highest monthly take-home at that level.
         </p>
 
         <div class="sweep-chart-shell">
@@ -913,6 +1014,74 @@
                     style={`stroke:${countrySeriesColors[series.country]}`}
                   />
                 {/each}
+
+                <rect
+                  class="sweep-hitbox"
+                  role="presentation"
+                  aria-hidden="true"
+                  x={SWEEP_CHART_INSET.left}
+                  y={SWEEP_CHART_INSET.top}
+                  width={SWEEP_PLOT_WIDTH}
+                  height={SWEEP_PLOT_HEIGHT}
+                  on:pointermove={handleSweepPointerMove}
+                  on:pointerleave={resetSweepHover}
+                />
+
+                {#if sweepHoverRows.length > 0}
+                  <line
+                    class="sweep-crosshair"
+                    x1={sweepHoverX}
+                    x2={sweepHoverX}
+                    y1={SWEEP_CHART_INSET.top}
+                    y2={SWEEP_CHART_HEIGHT - SWEEP_CHART_INSET.bottom}
+                  />
+
+                  {#each sweepHoverMarkers as marker}
+                    <circle
+                      class="sweep-marker"
+                      cx={marker.x}
+                      cy={marker.y}
+                      r="3.6"
+                      style={`fill:${countrySeriesColors[marker.country]}`}
+                    />
+                  {/each}
+
+                  <g class="sweep-tooltip" transform={`translate(${sweepHoverTooltipX} ${SWEEP_CHART_INSET.top + 8})`}>
+                    <rect class="sweep-tooltip-bg" width={SWEEP_TOOLTIP_WIDTH} height={sweepHoverTooltipHeight} rx="10" ry="10" />
+                    <text class="sweep-tooltip-title" x="12" y="18">
+                      {formatMoney(sweepHoverAnnualDisplay, displayCurrency)} ({formatMoney(sweepHoverAnnualUSD, 'USD')})
+                    </text>
+                    {#if sweepHoverBaselineCountry}
+                      <text class="sweep-tooltip-subtitle" x="12" y="34">
+                        Baseline: {countryNames[sweepHoverBaselineCountry]}
+                      </text>
+                    {/if}
+
+                    {#each sweepHoverRows as row, index}
+                      <circle
+                        class="sweep-tooltip-dot"
+                        cx="12"
+                        cy={48 + index * 16}
+                        r="3.2"
+                        style={`fill:${countrySeriesColors[row.country]}`}
+                      />
+                      <text
+                        class="sweep-tooltip-country"
+                        class:sweep-tooltip-country-base={row.isBaseline}
+                        x="21"
+                        y={50 + index * 16}
+                      >
+                        {countryNames[row.country]}
+                      </text>
+                      <text class="sweep-tooltip-value" x="208" y={50 + index * 16} text-anchor="end">
+                        {formatMoney(row.monthlyValue, displayCurrency)}
+                      </text>
+                      <text class="sweep-tooltip-delta" x="288" y={50 + index * 16} text-anchor="end">
+                        {formatSweepDelta(row)}
+                      </text>
+                    {/each}
+                  </g>
+                {/if}
               {/if}
             </svg>
           </div>
@@ -1448,6 +1617,62 @@
     stroke-linejoin: round;
     stroke-linecap: round;
     vector-effect: non-scaling-stroke;
+    pointer-events: none;
+  }
+
+  .sweep-hitbox {
+    fill: transparent;
+    cursor: crosshair;
+  }
+
+  .sweep-crosshair {
+    stroke: color-mix(in srgb, var(--accent) 70%, var(--ink-soft));
+    stroke-width: 1.2;
+    stroke-dasharray: 4 4;
+    pointer-events: none;
+  }
+
+  .sweep-marker {
+    stroke: var(--panel);
+    stroke-width: 1.3;
+    pointer-events: none;
+  }
+
+  .sweep-tooltip {
+    pointer-events: none;
+  }
+
+  .sweep-tooltip-bg {
+    fill: color-mix(in srgb, var(--panel) 92%, transparent);
+    stroke: var(--line);
+    stroke-width: 1;
+  }
+
+  .sweep-tooltip-title,
+  .sweep-tooltip-subtitle,
+  .sweep-tooltip-country,
+  .sweep-tooltip-value,
+  .sweep-tooltip-delta {
+    fill: var(--ink);
+    font-size: 10.4px;
+    dominant-baseline: middle;
+  }
+
+  .sweep-tooltip-subtitle {
+    fill: var(--ink-soft);
+    font-size: 9.8px;
+  }
+
+  .sweep-tooltip-country-base {
+    font-weight: 700;
+  }
+
+  .sweep-tooltip-value {
+    fill: var(--ink-soft);
+  }
+
+  .sweep-tooltip-delta {
+    fill: var(--ink-soft);
   }
 
   .sweep-legend {

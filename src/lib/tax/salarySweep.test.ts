@@ -95,4 +95,25 @@ describe('buildSalarySweep', () => {
 
     expect(aShape).toEqual(bShape);
   });
+
+  it('keeps Switzerland non-decreasing across the sweep range', () => {
+    const sweep = buildSalarySweep(BASE_INPUT, 'JPY', DEFAULT_FX_RATES);
+    const switzerland = sweep.series.find((series) => series.country === 'CH');
+
+    expect(switzerland).toBeDefined();
+    if (!switzerland) return;
+
+    for (let index = 1; index < switzerland.points.length; index += 1) {
+      expect(switzerland.points[index].netMonthlyDisplay).toBeGreaterThanOrEqual(
+        switzerland.points[index - 1].netMonthlyDisplay
+      );
+    }
+
+    const at250k = switzerland.points.find((point) => point.annualUSD === 250_000);
+    const at600k = switzerland.points.find((point) => point.annualUSD === 600_000);
+
+    expect(at250k).toBeDefined();
+    expect(at600k).toBeDefined();
+    expect(at600k?.netMonthlyDisplay ?? 0).toBeGreaterThan(at250k?.netMonthlyDisplay ?? 0);
+  });
 });

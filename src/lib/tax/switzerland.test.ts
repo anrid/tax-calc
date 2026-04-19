@@ -43,7 +43,7 @@ describe('calcSwitzerland2025ZurichEstimate', () => {
       residencyMonths: 12
     });
 
-    const cantonal = byLabel(result, 'Cantonal tax estimate (Zurich-style multiplier)');
+    const cantonal = byLabel(result, 'Cantonal tax estimate (Zurich-style calibrated split)');
     const municipal = byLabel(result, 'Municipal tax estimate (Zurich city 119%)');
     expect(result.residentTaxAnnualLocal).toBe(cantonal + municipal);
     expect(result.taxAnnualLocal).toBeGreaterThan(result.residentTaxAnnualLocal);
@@ -84,5 +84,49 @@ describe('calcSwitzerland2025ZurichEstimate', () => {
     expect(result.netAnnualLocal).toBe(
       result.grossAnnualLocal - result.taxAnnualLocal - result.employeeContribAnnualLocal
     );
+  });
+
+  it('keeps federal tax continuous near the upper married bracket threshold', () => {
+    const lower = calcSwitzerland2025ZurichEstimate({
+      annualSalaryCHF: 1_048_600,
+      married: true,
+      spouseHasIncome: false,
+      dependents: 0,
+      age: 40,
+      residencyMonths: 12
+    });
+
+    const higher = calcSwitzerland2025ZurichEstimate({
+      annualSalaryCHF: 1_048_900,
+      married: true,
+      spouseHasIncome: false,
+      dependents: 0,
+      age: 40,
+      residencyMonths: 12
+    });
+
+    const federalLower = byLabel(lower, 'Federal income tax (DBSt estimate)');
+    const federalHigher = byLabel(higher, 'Federal income tax (DBSt estimate)');
+
+    expect(federalHigher).toBeGreaterThanOrEqual(federalLower);
+    expect(federalHigher - federalLower).toBeLessThan(200);
+  });
+
+  it('keeps net annual income increasing across high-income levels', () => {
+    const salaries = [250_000, 400_000, 600_000, 900_000];
+    const nets = salaries.map((annualSalaryCHF) => {
+      return calcSwitzerland2025ZurichEstimate({
+        annualSalaryCHF,
+        married: false,
+        spouseHasIncome: false,
+        dependents: 0,
+        age: 40,
+        residencyMonths: 12
+      }).netAnnualLocal;
+    });
+
+    for (let index = 1; index < nets.length; index += 1) {
+      expect(nets[index]).toBeGreaterThan(nets[index - 1]);
+    }
   });
 });
