@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+
+# Build output
+.svelte-kit/
+dist/
+build/
+coverage/
+
+# Vercel local linkage/build artifacts
+.vercel/
+
+# Local debug / automation artifacts
+.playwright-mcp/
+.claude/
+.codex
+
+# Environment and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.jks
+.npmrc
+.netrc
+
+# Editor / OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
