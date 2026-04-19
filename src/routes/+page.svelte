@@ -55,6 +55,8 @@
   const SWEEP_PLOT_WIDTH = SWEEP_CHART_WIDTH - SWEEP_CHART_INSET.left - SWEEP_CHART_INSET.right;
   const SWEEP_PLOT_HEIGHT = SWEEP_CHART_HEIGHT - SWEEP_CHART_INSET.top - SWEEP_CHART_INSET.bottom;
   const SWEEP_TOOLTIP_WIDTH = 300;
+  const SWEEP_TOOLTIP_HEADER_HEIGHT = 60;
+  const SWEEP_TOOLTIP_ROW_HEIGHT = 17;
 
   const countrySeriesColors: Record<CountryCode, string> = {
     JP: '#00a7a0',
@@ -482,7 +484,7 @@
         sweepHoverBaselineCountry = summary.baselineCountry;
         sweepHoverX = getSweepX(summary.annualUSD);
         sweepHoverTooltipX = getSweepTooltipX(sweepHoverX);
-        sweepHoverTooltipHeight = 56 + sweepHoverRows.length * 16;
+        sweepHoverTooltipHeight = SWEEP_TOOLTIP_HEADER_HEIGHT + sweepHoverRows.length * SWEEP_TOOLTIP_ROW_HEIGHT;
 
         sweepHoverMarkers = visibleSweepSeries
           .map((series) => {
@@ -1061,7 +1063,7 @@
                       <circle
                         class="sweep-tooltip-dot"
                         cx="12"
-                        cy={48 + index * 16}
+                        cy={49 + index * SWEEP_TOOLTIP_ROW_HEIGHT}
                         r="3.2"
                         style={`fill:${countrySeriesColors[row.country]}`}
                       />
@@ -1069,14 +1071,24 @@
                         class="sweep-tooltip-country"
                         class:sweep-tooltip-country-base={row.isBaseline}
                         x="21"
-                        y={50 + index * 16}
+                        y={51 + index * SWEEP_TOOLTIP_ROW_HEIGHT}
                       >
                         {countryNames[row.country]}
                       </text>
-                      <text class="sweep-tooltip-value" x="208" y={50 + index * 16} text-anchor="end">
+                      <text
+                        class="sweep-tooltip-value"
+                        x="208"
+                        y={51 + index * SWEEP_TOOLTIP_ROW_HEIGHT}
+                        text-anchor="end"
+                      >
                         {formatMoney(row.monthlyValue, displayCurrency)}
                       </text>
-                      <text class="sweep-tooltip-delta" x="288" y={50 + index * 16} text-anchor="end">
+                      <text
+                        class="sweep-tooltip-delta"
+                        x="288"
+                        y={51 + index * SWEEP_TOOLTIP_ROW_HEIGHT}
+                        text-anchor="end"
+                      >
                         {formatSweepDelta(row)}
                       </text>
                     {/each}
@@ -1590,20 +1602,20 @@
   }
 
   .sweep-y-label {
-    font-size: 10.5px;
+    font-size: 11.8px;
   }
 
   .sweep-x-label {
-    font-size: 10.8px;
+    font-size: 12px;
   }
 
   .sweep-x-sub-label {
-    font-size: 9.6px;
+    font-size: 10.6px;
   }
 
   .sweep-axis-title {
     fill: var(--ink);
-    font-size: 11px;
+    font-size: 12.2px;
     font-weight: 600;
   }
 
@@ -1654,13 +1666,17 @@
   .sweep-tooltip-value,
   .sweep-tooltip-delta {
     fill: var(--ink);
-    font-size: 10.4px;
+    font-size: 11px;
     dominant-baseline: middle;
+  }
+
+  .sweep-tooltip-title {
+    font-weight: 600;
   }
 
   .sweep-tooltip-subtitle {
     fill: var(--ink-soft);
-    font-size: 9.8px;
+    font-size: 10.4px;
   }
 
   .sweep-tooltip-country-base {
