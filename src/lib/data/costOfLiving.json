@@ -1,0 +1,237 @@
+{
+  "version": "2026-Q2r1",
+  "updatedAt": "2026-04-22",
+  "notes": {
+    "rent": "Unfurnished apartments in liveable inner-city neighbourhoods. 1BR = single, 2BR = couple, 3BR = family.",
+    "utilities": "Electricity + water + heating/cooling + internet. CH: heating/water in Nebenkosten so figure covers electricity + internet only.",
+    "groceries": "Supermarket only, excludes eating out.",
+    "consumables": "Cleaning products, toiletries, paper goods, laundry/dish supplies. Scales: single=1x, couple=1.6x, family=2.4x."
+  },
+  "countries": {
+    "CH": {
+      "currency": "CHF",
+      "cities": [
+        {
+          "id": "zurich",
+          "name": "Zurich",
+          "neighbourhoods": ["Seefeld", "Enge", "Kreis 6"],
+          "costs": {
+            "single": { "rent": 2600, "utilities": 260, "groceries": 600, "consumables": 80 },
+            "couple": { "rent": 3600, "utilities": 280, "groceries": 1000, "consumables": 130 },
+            "family": { "rent": 5000, "utilities": 310, "groceries": 1550, "consumables": 190 }
+          }
+        },
+        {
+          "id": "geneva",
+          "name": "Geneva",
+          "neighbourhoods": ["Champel", "Eaux-Vives", "Plainpalais"],
+          "costs": {
+            "single": { "rent": 2400, "utilities": 270, "groceries": 600, "consumables": 80 },
+            "couple": { "rent": 3200, "utilities": 295, "groceries": 950, "consumables": 130 },
+            "family": { "rent": 4800, "utilities": 325, "groceries": 1500, "consumables": 190 }
+          }
+        }
+      ]
+    },
+    "UK": {
+      "currency": "GBP",
+      "cities": [
+        {
+          "id": "london",
+          "name": "London",
+          "neighbourhoods": ["Islington", "Clapham"],
+          "costs": {
+            "single": { "rent": 2200, "utilities": 225, "groceries": 325, "consumables": 40 },
+            "couple": { "rent": 3100, "utilities": 275, "groceries": 525, "consumables": 65 },
+            "family": { "rent": 4000, "utilities": 325, "groceries": 850, "consumables": 95 }
+          }
+        },
+        {
+          "id": "edinburgh",
+          "name": "Edinburgh",
+          "neighbourhoods": ["Marchmont", "Bruntsfield", "New Town"],
+          "costs": {
+            "single": { "rent": 1200, "utilities": 200, "groceries": 300, "consumables": 38 },
+            "couple": { "rent": 1600, "utilities": 250, "groceries": 475, "consumables": 60 },
+            "family": { "rent": 2300, "utilities": 300, "groceries": 750, "consumables": 88 }
+          }
+        }
+      ]
+    },
+    "SG": {
+      "currency": "SGD",
+      "cities": [
+        {
+          "id": "central",
+          "name": "Central",
+          "neighbourhoods": ["Tanjong Pagar", "Orchard", "Marina Bay"],
+          "costs": {
+            "single": { "rent": 3800, "utilities": 130, "groceries": 380, "consumables": 60 },
+            "couple": { "rent": 6500, "utilities": 165, "groceries": 620, "consumables": 95 },
+            "family": { "rent": 9000, "utilities": 200, "groceries": 950, "consumables": 145 }
+          }
+        },
+        {
+          "id": "east_holland",
+          "name": "East Coast / Holland V.",
+          "neighbourhoods": ["Holland Village", "East Coast", "Katong"],
+          "costs": {
+            "single": { "rent": 3000, "utilities": 120, "groceries": 360, "consumables": 58 },
+            "couple": { "rent": 5200, "utilities": 155, "groceries": 580, "consumables": 92 },
+            "family": { "rent": 7500, "utilities": 195, "groceries": 880, "consumables": 140 }
+          }
+        }
+      ]
+    },
+    "JP": {
+      "currency": "JPY",
+      "cities": [
+        {
+          "id": "tokyo",
+          "name": "Tokyo",
+          "neighbourhoods": ["Shibuya", "Nakameguro", "Daikanyama"],
+          "costs": {
+            "single": { "rent": 241000, "utilities": 19500, "groceries": 31000, "consumables": 4500 },
+            "couple": { "rent": 301000, "utilities": 23000, "groceries": 53000, "consumables": 7500 },
+            "family": { "rent": 426000, "utilities": 27000, "groceries": 77500, "consumables": 11000 }
+          }
+        },
+        {
+          "id": "osaka",
+          "name": "Osaka",
+          "neighbourhoods": ["Namba", "Shinsaibashi", "Umeda"],
+          "costs": {
+            "single": { "rent": 118500, "utilities": 17000, "groceries": 23500, "consumables": 3500 },
+            "couple": { "rent": 170000, "utilities": 21000, "groceries": 40000, "consumables": 5500 },
+            "family": { "rent": 277000, "utilities": 25000, "groceries": 59000, "consumables": 8500 }
+          }
+        }
+      ]
+    },
+    "SE": {
+      "currency": "SEK",
+      "cities": [
+        {
+          "id": "stockholm",
+          "name": "Stockholm",
+          "neighbourhoods": ["Södermalm", "Östermalm"],
+          "costs": {
+            "single": { "rent": 16000, "utilities": 2500, "groceries": 4000, "consumables": 500 },
+            "couple": { "rent": 19500, "utilities": 3000, "groceries": 7000, "consumables": 500 },
+            "family": { "rent": 26500, "utilities": 3500, "groceries": 10000, "consumables": 1000 }
+          }
+        },
+        {
+          "id": "gothenburg",
+          "name": "Gothenburg",
+          "neighbourhoods": ["Linnéstaden", "Vasastan"],
+          "costs": {
+            "single": { "rent": 10000, "utilities": 1500, "groceries": 4000, "consumables": 500 },
+            "couple": { "rent": 12500, "utilities": 1500, "groceries": 7000, "consumables": 500 },
+            "family": { "rent": 17500, "utilities": 2000, "groceries": 10000, "consumables": 1000 }
+          }
+        }
+      ]
+    },
+    "TH": {
+      "currency": "THB",
+      "cities": [
+        {
+          "id": "bangkok",
+          "name": "Bangkok",
+          "neighbourhoods": ["Sukhumvit", "Thonglor", "Ekkamai"],
+          "costs": {
+            "single": { "rent": 22500, "utilities": 3500, "groceries": 4500, "consumables": 500 },
+            "couple": { "rent": 37500, "utilities": 4500, "groceries": 7500, "consumables": 1000 },
+            "family": { "rent": 68000, "utilities": 5500, "groceries": 11500, "consumables": 1500 }
+          }
+        },
+        {
+          "id": "chiangmai",
+          "name": "Chiang Mai",
+          "neighbourhoods": ["Nimman", "Santitham"],
+          "costs": {
+            "single": { "rent": 15000, "utilities": 2500, "groceries": 3000, "consumables": 500 },
+            "couple": { "rent": 20000, "utilities": 3000, "groceries": 5000, "consumables": 1000 },
+            "family": { "rent": 30000, "utilities": 3500, "groceries": 7500, "consumables": 1500 }
+          }
+        }
+      ]
+    },
+    "USCA": {
+      "currency": "USD",
+      "cities": [
+        {
+          "id": "san_francisco",
+          "name": "San Francisco",
+          "neighbourhoods": ["Mission", "Noe Valley", "Castro"],
+          "costs": {
+            "single": { "rent": 3825, "utilities": 250, "groceries": 450, "consumables": 50 },
+            "couple": { "rent": 4675, "utilities": 300, "groceries": 775, "consumables": 100 },
+            "family": { "rent": 6400, "utilities": 325, "groceries": 1150, "consumables": 150 }
+          }
+        },
+        {
+          "id": "los_angeles",
+          "name": "Los Angeles",
+          "neighbourhoods": ["Silver Lake", "Los Feliz", "Echo Park"],
+          "costs": {
+            "single": { "rent": 3225, "utilities": 275, "groceries": 375, "consumables": 50 },
+            "couple": { "rent": 4475, "utilities": 300, "groceries": 625, "consumables": 75 },
+            "family": { "rent": 7150, "utilities": 350, "groceries": 950, "consumables": 125 }
+          }
+        }
+      ]
+    },
+    "MY": {
+      "currency": "MYR",
+      "cities": [
+        {
+          "id": "kuala_lumpur",
+          "name": "Kuala Lumpur",
+          "neighbourhoods": ["Bangsar", "Mont Kiara"],
+          "costs": {
+            "single": { "rent": 2500, "utilities": 500, "groceries": 1000, "consumables": 200 },
+            "couple": { "rent": 3500, "utilities": 500, "groceries": 1500, "consumables": 350 },
+            "family": { "rent": 5000, "utilities": 500, "groceries": 2500, "consumables": 500 }
+          }
+        },
+        {
+          "id": "penang",
+          "name": "Penang",
+          "neighbourhoods": ["George Town", "Gurney"],
+          "costs": {
+            "single": { "rent": 2000, "utilities": 500, "groceries": 1000, "consumables": 150 },
+            "couple": { "rent": 2500, "utilities": 500, "groceries": 1500, "consumables": 250 },
+            "family": { "rent": 4000, "utilities": 500, "groceries": 2500, "consumables": 400 }
+          }
+        }
+      ]
+    },
+    "IN": {
+      "currency": "INR",
+      "cities": [
+        {
+          "id": "mumbai",
+          "name": "Mumbai",
+          "neighbourhoods": ["Bandra West", "Powai"],
+          "costs": {
+            "single": { "rent": 61000, "utilities": 5000, "groceries": 7000, "consumables": 1000 },
+            "couple": { "rent": 105000, "utilities": 6500, "groceries": 12000, "consumables": 1500 },
+            "family": { "rent": 196000, "utilities": 8000, "groceries": 17500, "consumables": 2500 }
+          }
+        },
+        {
+          "id": "bangalore",
+          "name": "Bangalore",
+          "neighbourhoods": ["Koramangala", "Indiranagar"],
+          "costs": {
+            "single": { "rent": 30500, "utilities": 3000, "groceries": 7000, "consumables": 1000 },
+            "couple": { "rent": 46500, "utilities": 3500, "groceries": 12000, "consumables": 1500 },
+            "family": { "rent": 79000, "utilities": 4500, "groceries": 17500, "consumables": 2500 }
+          }
+        }
+      ]
+    }
+  }
+}

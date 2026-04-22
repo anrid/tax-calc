@@ -11,6 +11,13 @@
     type SweepHoverRow
   } from '$lib/tax/salarySweepHover';
   import { convertCurrency, DEFAULT_FX_RATES, formatMoney } from '$lib/fx';
+  import {
+    getCitiesForCountry,
+    getHouseholdType,
+    totalMonthlyCoL,
+    COL_VERSION,
+    HOUSEHOLD_BEDROOMS
+  } from '$lib/costOfLiving';
   import type {
     CalculatorInput,
     CountryCode,
@@ -122,6 +129,31 @@
   let spouseHasIncome = false;
   let dependents = 0;
   let age = 30;
+
+  let selectedColCity: Partial<Record<CountryCode, string>> = {};
+  $: colHouseholdType = getHouseholdType(married, dependents);
+
+  type ColCardData = {
+    cities: ReturnType<typeof getCitiesForCountry>;
+    cityId: string;
+    city: ReturnType<typeof getCitiesForCountry>[number];
+    costs: ReturnType<typeof getCitiesForCountry>[number]['costs'][typeof colHouseholdType];
+    total: number;
+  };
+  $: colData = (() => {
+    const codes: CountryCode[] = ['JP', 'SE', 'TH', 'CH', 'UK', 'USCA', 'MY', 'SG', 'IN'];
+    const result: Partial<Record<CountryCode, ColCardData>> = {};
+    for (const code of codes) {
+      const cities = getCitiesForCountry(code);
+      if (!cities.length) continue;
+      const cityId = selectedColCity[code] ?? cities[0].id;
+      const city = cities.find((c) => c.id === cityId);
+      if (!city) continue;
+      const costs = city.costs[colHouseholdType];
+      result[code] = { cities, cityId, city, costs, total: totalMonthlyCoL(costs) };
+    }
+    return result;
+  })();
 
   let residencyJP = 12;
   let residencySE = 12;
@@ -1239,6 +1271,41 @@
               </div>
             </div>
 
+            {#if colData[item.result.country]}
+              {@const col = colData[item.result.country]}
+              {@const afterEssentials = item.result.netMonthlyLocal - col.total}
+              <section class="col-section">
+                <div class="col-header">
+                  <span class="col-label">Est. cost of living</span>
+                  <div class="col-city-pills">
+                    {#each col.cities as c}
+                      <button
+                        class="col-city-pill"
+                        class:active={col.cityId === c.id}
+                        on:click={() => (selectedColCity = { ...selectedColCity, [item.result.country]: c.id })}
+                      >{c.name}</button>
+                    {/each}
+                  </div>
+                </div>
+                <p class="col-neighbourhoods muted">{col.city.neighbourhoods.join(' · ')}</p>
+                <div class="col-breakdown">
+                  <div><span>Rent <span class="col-br-tag">{HOUSEHOLD_BEDROOMS[colHouseholdType]}</span></span><strong>{formatMoney(col.costs.rent, item.result.currency)}</strong></div>
+                  <div><span>Utilities</span><strong>{formatMoney(col.costs.utilities, item.result.currency)}</strong></div>
+                  <div><span>Groceries</span><strong>{formatMoney(col.costs.groceries, item.result.currency)}</strong></div>
+                  <div><span>Consumables</span><strong>{formatMoney(col.costs.consumables, item.result.currency)}</strong></div>
+                </div>
+                <div class="col-after">
+                  <div>
+                    <span>After essentials</span>
+                    <span class="col-version muted">{COL_VERSION} · {col.city.neighbourhoods.join(', ')}</span>
+                  </div>
+                  <strong class:col-negative={afterEssentials < 0}>
+                    {formatMoney(afterEssentials, item.result.currency)}/mo
+                  </strong>
+                </div>
+              </section>
+            {/if}
+
             <details class="fold">
               <summary>Calculation details</summary>
               <ul>
@@ -1900,6 +1967,132 @@
   .metric-grid strong {
     font-size: 0.88rem;
     font-weight: 700;
+  }
+
+  .col-section {
+    border-top: 1px solid var(--line);
+    padding-top: 0.75rem;
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .col-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .col-label {
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--ink-soft);
+  }
+
+  .col-city-pills {
+    display: flex;
+    gap: 0.25rem;
+  }
+
+  .col-city-pill {
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    border: 1px solid var(--chip-border);
+    background: var(--chip-bg);
+    color: var(--ink-soft);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+  }
+
+  .col-city-pill.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+
+  .col-city-pill:not(.active):hover {
+    background: var(--field-bg);
+    color: var(--ink);
+  }
+
+  .col-neighbourhoods {
+    font-size: 0.75rem;
+    margin: 0;
+    line-height: 1.3;
+  }
+
+  .col-breakdown {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.3rem 0.5rem;
+  }
+
+  .col-breakdown div {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.25rem;
+  }
+
+  .col-br-tag {
+    font-size: 0.68rem;
+    font-weight: 700;
+    padding: 0.05rem 0.3rem;
+    border-radius: 3px;
+    background: var(--chip-bg);
+    border: 1px solid var(--chip-border);
+    color: var(--ink-soft);
+    vertical-align: middle;
+  }
+
+  .col-breakdown span {
+    font-size: 0.78rem;
+    color: var(--ink-soft);
+  }
+
+  .col-breakdown strong {
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+
+  .col-after {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+    padding-top: 0.4rem;
+    border-top: 1px solid var(--line);
+    flex-wrap: wrap;
+  }
+
+  .col-after div {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+  }
+
+  .col-after span:first-child {
+    font-size: 0.83rem;
+    font-weight: 700;
+  }
+
+  .col-after strong {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--accent);
+  }
+
+  .col-after strong.col-negative {
+    color: #c0392b;
+  }
+
+  .col-version {
+    font-size: 0.7rem;
   }
 
   .fold {
