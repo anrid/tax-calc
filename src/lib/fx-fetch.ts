@@ -1,6 +1,6 @@
 import type { FxRates } from '$lib/types';
 
-const FX_API_URL = 'https://api.frankfurter.app/latest?from=JPY&to=SEK,THB,CHF,GBP,USD,MYR,SGD,INR';
+const FX_API_URL = 'https://api.frankfurter.dev/v1/latest?from=JPY&to=SEK,THB,CHF,GBP,USD,MYR,SGD,INR';
 
 interface FrankfurterResponse {
   amount: number;
