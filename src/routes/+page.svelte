@@ -254,6 +254,24 @@
     return SWEEP_CHART_INSET.top + innerHeight - (netMonthlyDisplay / sweepYDomainMax) * innerHeight;
   }
 
+  function getSweepYForSeries(series: SalarySweepSeries, annualUSD: number): number | null {
+    const points = series.points;
+    if (points.length === 0) return null;
+    if (annualUSD <= points[0].annualUSD) return getSweepY(points[0].netMonthlyDisplay);
+    const last = points[points.length - 1];
+    if (annualUSD >= last.annualUSD) return getSweepY(last.netMonthlyDisplay);
+    for (let i = 1; i < points.length; i++) {
+      const prev = points[i - 1];
+      const curr = points[i];
+      if (annualUSD >= prev.annualUSD && annualUSD <= curr.annualUSD) {
+        const span = curr.annualUSD - prev.annualUSD;
+        const t = span > 0 ? (annualUSD - prev.annualUSD) / span : 0;
+        return getSweepY(prev.netMonthlyDisplay + t * (curr.netMonthlyDisplay - prev.netMonthlyDisplay));
+      }
+    }
+    return null;
+  }
+
   function createSweepPath(series: SalarySweepSeries): string {
     return series.points
       .map((point, index) => {
@@ -431,6 +449,23 @@
   );
 
   $: visibleSweepSeries = salarySweep.series.filter((series) => !hiddenSweepCountries.includes(series.country));
+
+  $: currentSalaryAnnualLocal = salaryPeriod === 'monthly' ? salaryAmount * 12 : salaryAmount;
+  $: currentSalaryAnnualUSD = convertCurrency(currentSalaryAnnualLocal, inputCurrency, 'USD', fxRates);
+  $: currentSalaryInRange =
+    Number.isFinite(currentSalaryAnnualUSD) &&
+    currentSalaryAnnualUSD >= salarySweep.range.minAnnualUSD &&
+    currentSalaryAnnualUSD <= salarySweep.range.maxAnnualUSD;
+  $: currentSalaryX = currentSalaryInRange ? getSweepX(currentSalaryAnnualUSD) : 0;
+  $: currentSalaryAnnualDisplay = currentSalaryInRange
+    ? convertCurrency(currentSalaryAnnualUSD, 'USD', displayCurrency, fxRates)
+    : 0;
+  $: currentSalaryMarkers = currentSalaryInRange
+    ? visibleSweepSeries.flatMap((series) => {
+        const y = getSweepYForSeries(series, currentSalaryAnnualUSD);
+        return y === null ? [] : [{ country: series.country, x: currentSalaryX, y }];
+      })
+    : [];
 
   $: {
     const targetSeries = visibleSweepSeries.length > 0 ? visibleSweepSeries : salarySweep.series;
@@ -1016,6 +1051,33 @@
                     style={`stroke:${countrySeriesColors[series.country]}`}
                   />
                 {/each}
+
+                {#if currentSalaryInRange}
+                  <line
+                    class="sweep-salary-line"
+                    x1={currentSalaryX}
+                    x2={currentSalaryX}
+                    y1={SWEEP_CHART_INSET.top}
+                    y2={SWEEP_CHART_HEIGHT - SWEEP_CHART_INSET.bottom}
+                  />
+                  {#each currentSalaryMarkers as marker}
+                    <circle
+                      class="sweep-salary-marker"
+                      cx={marker.x}
+                      cy={marker.y}
+                      r="4.2"
+                      style={`stroke:${countrySeriesColors[marker.country]}`}
+                    />
+                  {/each}
+                  <text
+                    class="sweep-salary-label"
+                    x={currentSalaryX}
+                    y={SWEEP_CHART_INSET.top - 4}
+                    text-anchor="middle"
+                  >
+                    You · {formatMoney(currentSalaryAnnualDisplay, displayCurrency)}
+                  </text>
+                {/if}
 
                 <rect
                   class="sweep-hitbox"
@@ -1647,6 +1709,26 @@
   .sweep-marker {
     stroke: var(--panel);
     stroke-width: 1.3;
+    pointer-events: none;
+  }
+
+  .sweep-salary-line {
+    stroke: var(--accent);
+    stroke-width: 1.6;
+    opacity: 0.9;
+    pointer-events: none;
+  }
+
+  .sweep-salary-marker {
+    fill: var(--panel);
+    stroke-width: 2;
+    pointer-events: none;
+  }
+
+  .sweep-salary-label {
+    fill: var(--accent);
+    font-size: 10.5px;
+    font-weight: 600;
     pointer-events: none;
   }
 
