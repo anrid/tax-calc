@@ -131,6 +131,7 @@
   let age = 30;
 
   let selectedColCity: Partial<Record<CountryCode, string>> = {};
+  let hoveredSavingsCountry: CountryCode | null = null;
   $: colHouseholdType = getHouseholdType(married, dependents);
 
   type ColCardData = {
@@ -153,6 +154,71 @@
       result[code] = { cities, cityId, city, costs, total: totalMonthlyCoL(costs) };
     }
     return result;
+  })();
+
+  function polarToCartesian(cx: number, cy: number, r: number, angleDeg: number) {
+    const rad = ((angleDeg - 90) * Math.PI) / 180;
+    return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+  }
+
+  function donutArcPath(cx: number, cy: number, rOuter: number, rInner: number, startDeg: number, endDeg: number): string {
+    const end = Math.min(endDeg, startDeg + 359.99);
+    const o1 = polarToCartesian(cx, cy, rOuter, startDeg);
+    const o2 = polarToCartesian(cx, cy, rOuter, end);
+    const i2 = polarToCartesian(cx, cy, rInner, end);
+    const i1 = polarToCartesian(cx, cy, rInner, startDeg);
+    const large = end - startDeg > 180 ? 1 : 0;
+    return `M${o1.x} ${o1.y} A${rOuter} ${rOuter} 0 ${large} 1 ${o2.x} ${o2.y} L${i2.x} ${i2.y} A${rInner} ${rInner} 0 ${large} 0 ${i1.x} ${i1.y}Z`;
+  }
+
+  type SavingsEntry = {
+    country: CountryCode;
+    name: string;
+    amountDisplay: number;
+    amountLocal: number;
+    localCurrency: Currency;
+    pctOfTakeHome: number;
+    color: string;
+    pctOfTotal: number;
+    path: string;
+  };
+
+  $: colSavingsData = (() => {
+    const CX = 130, CY = 130, R_OUT = 108, R_IN = 62;
+    const entries = displayCountries
+      .map((item): SavingsEntry | null => {
+        const col = colData[item.result.country];
+        if (!col || col.total === 0) return null;
+        const afterLocal = item.result.netMonthlyLocal - col.total;
+        const afterDisplay = convertCurrency(afterLocal, item.result.currency, displayCurrency, fxRates);
+        return {
+          country: item.result.country,
+          name: countryNames[item.result.country],
+          amountDisplay: afterDisplay,
+          amountLocal: afterLocal,
+          localCurrency: item.result.currency,
+          pctOfTakeHome: item.result.netMonthlyLocal > 0
+            ? Math.round((afterLocal / item.result.netMonthlyLocal) * 100) : 0,
+          color: countrySeriesColors[item.result.country],
+          pctOfTotal: 0,
+          path: ''
+        };
+      })
+      .filter((x): x is SavingsEntry => x !== null);
+
+    const positives = entries.filter((e) => e.amountDisplay > 0).sort((a, b) => b.amountDisplay - a.amountDisplay);
+    const deficits = entries.filter((e) => e.amountDisplay <= 0);
+    const total = positives.reduce((s, e) => s + e.amountDisplay, 0);
+
+    let angle = 0;
+    const slices = positives.map((e) => {
+      const sweep = (e.amountDisplay / total) * 360;
+      const start = angle;
+      angle += sweep;
+      return { ...e, pctOfTotal: Math.round((e.amountDisplay / total) * 100), path: donutArcPath(CX, CY, R_OUT, R_IN, start, angle) };
+    });
+
+    return { slices, deficits, total };
   })();
 
   let residencyJP = 12;
@@ -1219,7 +1285,7 @@
         </div>
 
         <ul class="chart-list">
-          {#each displayCountries as item}
+          {#each [...displayCountries].sort((a, b) => b.netMonthlyDisplay - a.netMonthlyDisplay) as item}
             <li>
               <div class="row-head">
                 <span>{countryNames[item.result.country]}</span>
@@ -1232,6 +1298,70 @@
           {/each}
         </ul>
       </section>
+
+      {#if colSavingsData.slices.length > 0}
+        <section class="panel col-savings-panel">
+          <div class="section-head">
+            <h2>Savings after essentials ({displayCurrency})</h2>
+            <p class="muted">Monthly surplus after rent, utilities, groceries and consumables — {colHouseholdType} household, {COL_VERSION} estimates. The % after each amount is how much of that country's take-home pay is left after essentials.</p>
+          </div>
+          <svg viewBox="0 0 640 260" class="col-pie-shell" role="img" aria-label="Savings donut chart">
+            <!-- slices -->
+            <g>
+              {#each colSavingsData.slices as slice}
+                <path
+                  class="col-pie-slice"
+                  d={slice.path}
+                  fill={slice.color}
+                  stroke="var(--panel)"
+                  stroke-width="2.5"
+                  opacity={hoveredSavingsCountry && hoveredSavingsCountry !== slice.country ? 0.25 : 1}
+                  on:mouseenter={() => (hoveredSavingsCountry = slice.country)}
+                  on:mouseleave={() => (hoveredSavingsCountry = null)}
+                />
+              {/each}
+            </g>
+            <!-- center hover label -->
+            {#if hoveredSavingsCountry}
+              {@const hs = colSavingsData.slices.find((s) => s.country === hoveredSavingsCountry)}
+              {#if hs}
+                <text x="130" y="118" text-anchor="middle" font-size="11" fill="var(--ink-soft)" font-family="var(--font-body)">{hs.name}</text>
+                <text x="130" y="134" text-anchor="middle" font-size="13" fill="var(--ink)" font-family="var(--font-body)" font-weight="700">{formatMoney(hs.amountDisplay, displayCurrency)}</text>
+                <text x="130" y="150" text-anchor="middle" font-size="11" fill="var(--ink-soft)" font-family="var(--font-body)">saves {hs.pctOfTakeHome}%</text>
+              {/if}
+            {/if}
+            <!-- legend -->
+            <g>
+              {#each colSavingsData.slices as slice, i}
+                {@const legendY = 16 + i * 24}
+                {@const dimmed = hoveredSavingsCountry && hoveredSavingsCountry !== slice.country}
+                <g
+                  class="col-savings-legend-row"
+                  opacity={dimmed ? 0.3 : 1}
+                >
+                  <rect x="275" y={legendY} width="10" height="10" fill={slice.color} rx="2" />
+                  <text x="291" y={legendY + 9} font-size="12" fill="var(--ink)" font-family="var(--font-body)" font-weight={hoveredSavingsCountry === slice.country ? '700' : '400'}>{slice.name}</text>
+                  <text x="500" y={legendY + 9} font-size="12" fill="var(--ink)" font-family="var(--font-body)" font-weight="600" text-anchor="end">{formatMoney(slice.amountDisplay, displayCurrency)}</text>
+                  <text x="505" y={legendY + 9} font-size="11" fill="var(--ink-soft)" font-family="var(--font-body)">{slice.pctOfTotal}% · saves {slice.pctOfTakeHome}%</text>
+                </g>
+              {/each}
+              {#if colSavingsData.deficits.length > 0}
+                {@const deficitY = 16 + colSavingsData.slices.length * 24 + 8}
+                <line x1="275" y1={deficitY} x2="620" y2={deficitY} stroke="var(--line)" stroke-width="1" />
+                {#each colSavingsData.deficits as d, i}
+                  {@const dy = deficitY + 12 + i * 22}
+                  <g class="col-savings-legend-row" opacity={hoveredSavingsCountry && hoveredSavingsCountry !== d.country ? 0.3 : 1}>
+                    <rect x="275" y={dy} width="10" height="10" fill="var(--line)" rx="2" />
+                    <text x="291" y={dy + 9} font-size="12" fill="var(--ink-soft)" font-family="var(--font-body)">{d.name}</text>
+                    <text x="500" y={dy + 9} font-size="12" fill="#c0392b" font-family="var(--font-body)" font-weight="600" text-anchor="end">{formatMoney(d.amountDisplay, displayCurrency)}</text>
+                    <text x="505" y={dy + 9} font-size="11" fill="var(--ink-soft)" font-family="var(--font-body)">deficit</text>
+                  </g>
+                {/each}
+              {/if}
+            </g>
+          </svg>
+        </section>
+      {/if}
 
       <section class="country-list">
         {#each displayCountries as item, index}
@@ -1274,6 +1404,8 @@
             {#if colData[item.result.country]}
               {@const col = colData[item.result.country]}
               {@const afterEssentials = item.result.netMonthlyLocal - col.total}
+              {@const afterEssentialsDisplay = convertCurrency(afterEssentials, item.result.currency, displayCurrency, fxRates)}
+              {@const afterEssentialsPct = item.result.netMonthlyLocal > 0 ? Math.round((afterEssentials / item.result.netMonthlyLocal) * 100) : 0}
               <section class="col-section">
                 <div class="col-header">
                   <span class="col-label">Est. cost of living</span>
@@ -1300,7 +1432,8 @@
                     <span class="col-version muted">{COL_VERSION} · {col.city.neighbourhoods.join(', ')}</span>
                   </div>
                   <strong class:col-negative={afterEssentials < 0}>
-                    {formatMoney(afterEssentials, item.result.currency)}/mo
+                    {formatMoney(afterEssentialsDisplay, displayCurrency)}/mo
+                    <span class="col-after-sub">({#if displayCurrency !== item.result.currency}{formatMoney(afterEssentials, item.result.currency)} · {/if}{afterEssentialsPct}%)</span>
                   </strong>
                 </div>
               </section>
@@ -2093,6 +2226,31 @@
 
   .col-version {
     font-size: 0.7rem;
+  }
+
+  .col-after-sub {
+    font-size: 0.78rem;
+    font-weight: 400;
+    opacity: 0.7;
+    white-space: nowrap;
+  }
+
+  .col-savings-panel {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .col-pie-shell {
+    width: 100%;
+    overflow: visible;
+  }
+
+  .col-pie-slice {
+    transition: opacity 0.15s;
+  }
+
+  .col-pie-slice:hover {
+    opacity: 0.75;
   }
 
   .fold {
